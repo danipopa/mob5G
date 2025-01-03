@@ -1,0 +1,53 @@
+FROM debian:bookworm
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Disable service start during package installation
+RUN echo '#!/bin/sh\nexit 101' > /usr/sbin/policy-rc.d && chmod +x /usr/sbin/policy-rc.d
+
+# Install prerequisites and FD.io repository
+RUN apt-get update && \
+    apt-get install -y curl gnupg software-properties-common && \
+    curl -fsSL https://packagecloud.io/fdio/release/gpgkey | apt-key add - && \
+    echo "deb https://packagecloud.io/fdio/release/ubuntu focal main" > /etc/apt/sources.list.d/99fdio.list && \
+    apt-get update && \
+    apt-get install -y iproute2 net-tools pciutils vim wget python3 python3-pip
+
+RUN wget http://ftp.debian.org/debian/pool/main/o/openssl/libssl1.1_1.1.1n-0+deb10u3_amd64.deb && \
+    dpkg -i libssl1.1_1.1.1n-0+deb10u3_amd64.deb && \
+    apt-get install -f
+
+# Install VPP and related packages
+RUN apt-get install -y dpdk vpp vpp-plugin-core vpp-plugin-dpdk vpp-plugin-devtools frr && \
+    apt-get clean
+
+# Install Meson and Ninja
+RUN pip3 install meson ninja
+
+# Install dependencies for building DPDK tools
+RUN apt-get update && \
+    apt-get install -y build-essential libnuma-dev wget tar
+
+# Download and build DPDK tools
+RUN wget https://fast.dpdk.org/rel/dpdk-22.11.tar.xz && \
+    tar -xvf dpdk-22.11.tar.xz && \
+    cd dpdk-22.11 && \
+    meson build && \
+    ninja -C build && \
+    ninja -C build install && \
+    ldconfig && \
+    rm -rf /dpdk-22.11 dpdk-22.11.tar.xz
+
+# Restore policy-rc.d to default
+RUN rm /usr/sbin/policy-rc.d
+
+# Copy VPP configuration
+COPY vpp.conf /etc/vpp/vpp.conf
+
+# Set VPP configuration path
+ENV VPP_CONFIG=/etc/vpp/vpp.conf
+
+# Start VPP
+CMD ["vpp", "-c", "/etc/vpp/vpp.conf"]
+

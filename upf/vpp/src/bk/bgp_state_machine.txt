@@ -1,0 +1,27 @@
+#include <bgp/bgp.h>
+#include <vlib/vlib.h>
+
+#include <bgp/bgp_messages.h>
+
+void bgp_handle_route_update(bgp_neighbor_t *neighbor);
+
+/**
+ * Handles sending and receiving Keepalive messages for a BGP neighbor.
+ */
+void bgp_handle_keepalive(bgp_neighbor_t *neighbor);
+
+
+/* Handle entering a specific state */
+void bgp_enter_state(bgp_main_t *bmp, bgp_neighbor_t *neighbor, bgp_state_t new_state);
+
+/* Handle exiting a specific state */
+void bgp_exit_state(bgp_main_t *bmp, bgp_neighbor_t *neighbor, bgp_state_t old_state);
+
+/* Transition neighbor to a new state */
+void bgp_transition_state(bgp_main_t *bmp, bgp_neighbor_t *neighbor, bgp_state_t new_state);
+
+/* Periodic processing of state transitions */
+void bgp_process_state(bgp_main_t *bmp, bgp_neighbor_t *neighbor);
+
+/* Timer events for managing neighbor state */
+void bgp_handle_timers(bgp_main_t *bmp, bgp_neighbor_t *neighbor);

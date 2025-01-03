@@ -1,0 +1,31 @@
+#ifndef __BGP_SOCKET_H__
+#define __BGP_SOCKET_H__
+
+#include <netinet/in.h>  // Required for struct sockaddr_in
+#include <vppinfra/clib.h>
+#include <vnet/ip/ip.h>
+
+#define BGP_PORT 179
+
+// Definition of bgp_socket_t
+typedef struct {
+    int socket_fd;
+    struct sockaddr_in peer_addr;
+} bgp_socket_t;
+
+/* Initialize the BGP socket */
+bgp_socket_t *bgp_socket_init(ip4_address_t *peer_ip);
+
+/* Establish a connection to the BGP peer */
+int bgp_socket_connect(bgp_socket_t *sock);
+
+/* Send a BGP message */
+int bgp_socket_send(bgp_socket_t *sock, void *message, size_t length);
+
+/* Receive a BGP message */
+int bgp_socket_receive(bgp_socket_t *sock, void *buffer, size_t buffer_size);
+
+/* Close the BGP socket */
+void bgp_socket_close(bgp_socket_t *sock);
+
+#endif /* __BGP_SOCKET_H__ */

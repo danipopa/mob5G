@@ -1,0 +1,34 @@
+{
+  "project_structure": {
+    "upf-n4/": {
+      "cmd/": {
+        "server/": {
+          "main.go": "package main\n\nimport (\n    \"upf-n4/internal/pfcp\"\n    \"upf-n4/internal/transport\"\n    \"log\"\n)\n\nfunc main() {\n    log.Println(\"Starting UPF-N4 PFCP server...\")\n    err := transport.ListenForPFCPMessages(8805, pfcp.HandleMessage)\n    if err != nil {\n        log.Fatalf(\"Failed to start server: %v\", err)\n    }\n}\n"
+        }
+      },
+      "internal/": {
+        "pfcp/": {
+          "serializer.go": "package pfcp\n\nimport (\n    \"bytes\"\n    \"encoding/binary\"\n    \"errors\"\n)\n\n// PFCPMessage represents a PFCP message.\ntype PFCPMessage struct {\n    Version       uint8\n    MessageType   uint8\n    SequenceNumber uint32\n    MessageLength uint16\n    Payload       []byte\n}\n\nfunc SerializePFCPMessage(msg *PFCPMessage) ([]byte, error) {\n    buf := new(bytes.Buffer)\n\n    // Serialize header\n    buf.WriteByte(msg.Version)\n    buf.WriteByte(msg.MessageType)\n    binary.Write(buf, binary.BigEndian, msg.SequenceNumber)\n    binary.Write(buf, binary.BigEndian, msg.MessageLength)\n\n    // Serialize payload\n    if len(msg.Payload) > 0 {\n        buf.Write(msg.Payload)\n    }\n\n    return buf.Bytes(), nil\n}\n\nfunc DeserializePFCPMessage(data []byte) (*PFCPMessage, error) {\n    if len(data) < 8 {\n        return nil, errors.New(\"data too short for PFCP message\")\n    }\n\n    buf := bytes.NewReader(data)\n    msg := &PFCPMessage{}\n\n    binary.Read(buf, binary.BigEndian, &msg.Version)\n    binary.Read(buf, binary.BigEndian, &msg.MessageType)\n    binary.Read(buf, binary.BigEndian, &msg.SequenceNumber)\n    binary.Read(buf, binary.BigEndian, &msg.MessageLength)\n\n    msg.Payload = make([]byte, buf.Len())\n    buf.Read(msg.Payload)\n\n    return msg, nil\n}\n",
+          "handler.go": "package pfcp\n\nimport (\n    \"log\"\n)\n\nfunc HandleMessage(data []byte, addr string) {\n    msg, err := DeserializePFCPMessage(data)\n    if err != nil {\n        log.Printf(\"Error parsing PFCP message from %s: %v\", addr, err)\n        return\n    }\n\n    switch msg.MessageType {\n    case PFCPAssociationSetupRequest:\n        log.Printf(\"Handling PFCP Association Setup Request from %s\", addr)\n        // Add handling logic here\n    default:\n        log.Printf(\"Unknown PFCP message type %d from %s\", msg.MessageType, addr)\n    }\n}\n",
+          "constants.go": "package pfcp\n\nconst (\n    PFCPAssociationSetupRequest uint8 = 1\n    PFCPAssociationSetupResponse uint8 = 2\n)\n"
+        },
+        "transport/": {
+          "udp.go": "package transport\n\nimport (\n    \"log\"\n    \"net\"\n)\n\nfunc ListenForPFCPMessages(port int, handler func([]byte, string)) error {\n    addr := net.UDPAddr{Port: port}\n    conn, err := net.ListenUDP(\"udp\", &addr)\n    if err != nil {\n        return err\n    }\n    defer conn.Close()\n\n    log.Printf(\"Listening for PFCP messages on port %d...\", port)\n    buf := make([]byte, 1500)\n\n    for {\n        n, remoteAddr, err := conn.ReadFromUDP(buf)\n        if err != nil {\n            log.Printf(\"Error reading UDP packet: %v\", err)\n            continue\n        }\n        go handler(buf[:n], remoteAddr.String())\n    }\n}\n"
+        }
+      },
+      "configs/": {
+        "config.yaml": "port: 8805\n"
+      },
+      "docker/": {
+        "Dockerfile": "# Dockerfile for UPF-N4\nFROM golang:1.23.4 AS builder\nWORKDIR /app\nCOPY . .\nRUN go mod tidy && go build -o upf-n4 ./cmd/server\n\nFROM debian:bullseye\nWORKDIR /app\nCOPY --from=builder /app/upf-n4 /app/\nCOPY configs/config.yaml /app/config.yaml\nENTRYPOINT [\"/app/upf-n4\"]\n"
+      },
+      "deployments/": {
+        "k8s/": {
+          "deployment.yaml": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: upf-n4\n  labels:\n    app: upf-n4\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n      app: upf-n4\n  template:\n    metadata:\n      labels:\n        app: upf-n4\n    spec:\n      containers:\n      - name: upf-n4\n        image: upf-n4:latest\n        ports:\n        - containerPort: 8805\n        volumeMounts:\n        - name: config-volume\n          mountPath: /app/config.yaml\n          subPath: config.yaml\n      volumes:\n      - name: config-volume\n        configMap:\n          name: upf-n4-config\n",
+          "service.yaml": "apiVersion: v1\nkind: Service\nmetadata:\n  name: upf-n4-service\n  labels:\n    app: upf-n4\nspec:\n  selector:\n    app: upf-n4\n  ports:\n    - protocol: UDP\n      port: 8805\n      targetPort: 8805\n  type: ClusterIP\n"
+        }
+      }
+    }
+  }
+}
+

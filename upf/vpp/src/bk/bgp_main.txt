@@ -1,0 +1,24 @@
+#include <vnet/vnet.h>
+#include <vnet/ip/ip.h>
+#include <vnet/plugin/plugin.h>
+#include <bgp/bgp.h>
+
+bgp_main_t bgp_main;
+
+int bgp_enable_disable(bgp_main_t *bmp, u32 sw_if_index, int enable_disable) {
+    // Add logic for enabling/disabling BGP on interfaces.
+    return 0;
+}
+
+static clib_error_t *bgp_init(vlib_main_t *vm) {
+    bgp_main_t *bmp = &bgp_main;
+    bmp->vlib_main = vm;
+    bmp->vnet_main = vnet_get_main();
+    bmp->bgp_router_id = 0;  // Initialize router ID
+    bmp->bgp_as_number = 0;  // Initialize AS number
+    bmp->routes = 0;
+    bmp->prefix_lists = NULL; // Initialize to NULL to indicate an empty list
+    return 0;
+}
+
+VLIB_INIT_FUNCTION(bgp_init);

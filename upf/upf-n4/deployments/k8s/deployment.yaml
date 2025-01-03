@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: upf-n4
+  labels:
+    app: upf-n4
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: upf-n4
+  template:
+    metadata:
+      labels:
+        app: upf-n4
+    spec:
+      containers:
+      - name: upf-n4
+        image: upf-n4:latest
+        ports:
+        - containerPort: 8805
+        volumeMounts:
+        - name: config-volume
+          mountPath: /app/config.yaml
+          subPath: config.yaml
+      volumes:
+      - name: config-volume
+        configMap:
+          name: upf-n4-config
+

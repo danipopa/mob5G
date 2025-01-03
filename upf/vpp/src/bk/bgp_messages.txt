@@ -1,0 +1,67 @@
+#ifndef __included_bgp_messages_h__
+#define __included_bgp_messages_h__
+
+#include <vnet/ip/ip.h>
+#include <vppinfra/clib.h>
+
+
+/**
+ * BGP Message Types
+ */
+typedef enum {
+    BGP_MSG_OPEN = 1,
+    BGP_MSG_UPDATE = 2,
+    BGP_MSG_NOTIFICATION = 3,
+    BGP_MSG_KEEPALIVE = 4
+} bgp_message_type_t;
+
+/**
+ * BGP Message Header
+ */
+typedef struct {
+    u8 marker[16];    // All bits set to 1
+    u16 length;       // Total length of the message
+    u8 type;          // BGP message type
+} bgp_message_header_t;
+
+/**
+ * BGP OPEN Message
+ */
+typedef struct {
+    bgp_message_header_t header;
+    u8 version;
+    u16 my_as;
+    u16 hold_time;
+    ip4_address_t bgp_identifier;
+    u8 opt_param_length;
+    u8 optional_parameters[];
+} bgp_open_message_t;
+
+/**
+ * BGP UPDATE Message
+ */
+typedef struct {
+    bgp_message_header_t header;
+    u16 withdrawn_routes_length;
+    u8 withdrawn_routes[];
+    // Path attributes and NLRI follow
+} bgp_update_message_t;
+
+/**
+ * BGP KEEPALIVE Message
+ */
+typedef struct {
+    bgp_message_header_t header;
+} bgp_keepalive_message_t;
+
+/**
+ * BGP NOTIFICATION Message
+ */
+typedef struct {
+    bgp_message_header_t header;
+    u8 error_code;
+    u8 error_subcode;
+    u8 data[];
+} bgp_notification_message_t;
+
+#endif /* __included_bgp_messages_h__ */

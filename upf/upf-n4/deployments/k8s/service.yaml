@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: upf-n4-service
+  labels:
+    app: upf-n4
+spec:
+  selector:
+    app: upf-n4
+  ports:
+    - protocol: UDP
+      port: 8805
+      targetPort: 8805
+  type: ClusterIP
+

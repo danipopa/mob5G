@@ -1,0 +1,38 @@
+<clixon-config xmlns="http://clicon.org/yang">
+
+  <!-- Where Clixon looks for YANG modules -->
+  <yang-modules>
+    <dir>./</dir>  <!-- current directory -->
+  </yang-modules>
+
+  <!-- Use in-memory DBs for config (simple approach) -->
+  <startupDB>internal</startupDB>
+  <runningDB>internal</runningDB>
+  <candidateDB>internal</candidateDB>
+
+  <!-- Provide a local CLI -->
+  <clis>
+    <cli>
+      <auto-commit>true</auto-commit>
+      <history-size>50</history-size>
+      <prompt>clixon# </prompt>
+    </cli>
+  </clis>
+
+  <!-- Enable NETCONF over SSH on port 830 -->
+  <netconfs>
+    <netconf>
+      <port>830</port>
+    </netconf>
+  </netconfs>
+
+  <!-- (Optional) Enable RESTCONF too, if desired -->
+  <!--
+  <restconfs>
+    <restconf>
+      <port>8008</port>
+    </restconf>
+  </restconfs>
+  -->
+
+</clixon-config>

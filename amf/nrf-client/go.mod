@@ -1,4 +1,4 @@
-module github.com/danipopa/amf/udm-client
+module github.com/danipopa/mob5g/amf/nrf-client
 
 go 1.23.4
 
