@@ -1,13 +1,15 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"log"
 	"net/http"
+	"time" // Import the time package for date and time operations
 
-	"github.com/gorilla/mux"
 	"github.com/go-redis/redis/v8"
+	"github.com/gorilla/mux"
 )
 
 var ctx = context.Background()
@@ -15,62 +17,20 @@ var redisClient *redis.Client
 
 // NFProfile represents a Network Function profile
 type NFProfile struct {
-    // Basic NF Information
-    NFID         string   `json:"nf_id"`          // Unique NF identifier
-    NFInstanceID string   `json:"nf_instance_id"` // Instance ID of the NF
-    NFType       string   `json:"nf_type"`        // Type of NF (e.g., AMF, SMF, PCF)
-    Status       string   `json:"status"`         // Registration status (e.g., REGISTERED, DEREGISTERED)
-    FQDN         string   `json:"fqdn"`           // Fully Qualified Domain Name
-    IPAddresses  []string `json:"ip_addresses"`   // List of IP addresses (IPv4/IPv6)
-    ServiceURLs  []string `json:"service_urls"`   // URLs for NF services
-    HeartbeatTimer int     `json:"heartbeat_timer"` // Heartbeat interval in seconds
-
-    // PLMN Information
-    PLMNID struct {                             // Public Land Mobile Network Identifier
-        MNC string `json:"mnc"`                 // Mobile Network Code
-        MCC string `json:"mcc"`                 // Mobile Country Code
-    } `json:"plmn_id"`
-
-    // Network Slicing
-    SNssais []struct {                          // Slice/Service Type and Slice Differentiator
-        SST string `json:"sst"`                 // Slice/Service Type (e.g., eMBB, URLLC)
-        SD  string `json:"sd"`                  // Slice Differentiator
-    } `json:"snssais"`
-
-    // Area and DNN Information
-    AreaID string   `json:"area_id"`            // Area ID for NF coverage
-    DNNs   []string `json:"dnns"`               // List of supported Data Network Names
-
-    // Security and Integrity
-    SecurityFeatures []string `json:"security_features"` // List of supported security features
-    IntegrityAlgorithms []string `json:"integrity_algorithms"` // Message integrity algorithms
-    EncryptionAlgorithms []string `json:"encryption_algorithms"` // Encryption algorithms
-
-    // NF Services
-    NFServices []struct {                       // Services provided by the NF
-        ServiceName     string   `json:"service_name"`     // Name of the service
-        ServiceURLs     []string `json:"service_urls"`     // URLs for accessing the service
-        ServiceStatus   string   `json:"service_status"`   // Status of the service (e.g., ACTIVE, INACTIVE)
-        AllowedPlmns    []string `json:"allowed_plmns"`    // Allowed PLMNs for the service
-        SupportedFeatures []string `json:"supported_features"` // Supported features for the service
-    } `json:"nf_services"`
-
-    // Load and Capacity
-    Capacity       int    `json:"capacity"`     // NF capacity metric
-    LoadLevelInfo  int    `json:"load_level"`   // Current load level (percentage)
-    MaxCapacity    int    `json:"max_capacity"` // Maximum capacity of the NF
-
-    // Discovery and Management
-    RecoveryTime      string            `json:"recovery_time"`      // Last recovery timestamp
-    AllowedPlmnList   []string          `json:"allowed_plmn_list"`  // List of allowed PLMNs
-    PreferredNFs      []string          `json:"preferred_nfs"`      // List of preferred NFs for interactions
-    ConfigurationInfo map[string]string `json:"configuration_info"` // Additional configuration details
-
-    // Additional Features
-    IWKPCOs           []string          `json:"iwk_pcos"`           // Interworking Packet Core Optimizations
-    SupportedProtocols []string          `json:"supported_protocols"` // Protocols supported by the NF
-    AdditionalInfo     map[string]string `json:"additional_info"`    // Vendor-specific extensions
+	NFID              string            `json:"nf_id"`
+	NFInstanceID      string            `json:"nf_instance_id"`
+	NFType            string            `json:"nf_type"`
+	Status            string            `json:"status"`
+	FQDN              string            `json:"fqdn"`
+	IPAddresses       []string          `json:"ip_addresses"`
+	ServiceURLs       []string          `json:"service_urls"`
+	HeartbeatTimer    int               `json:"heartbeat_timer"`
+	PLMNID            map[string]string `json:"plmn_id"`
+	SNssais           []map[string]string `json:"snssais"`
+	AdditionalInfo    map[string]string `json:"additional_info"`
+	Subscriptions     []string          `json:"subscriptions"`
 }
+
 // Initialize Redis connection
 func init() {
 	log.Println("Initializing Redis client...")
@@ -83,50 +43,46 @@ func init() {
 	log.Println("Redis client initialized successfully.")
 }
 
-// Register a new NF
+// RegisterNF handles NF registration or replacement
 func RegisterNF(w http.ResponseWriter, r *http.Request) {
-	log.Println("Handling NF registration request...")
+	vars := mux.Vars(r)
+	nfInstanceID := vars["nfInstanceID"]
+
 	var profile NFProfile
 	if err := json.NewDecoder(r.Body).Decode(&profile); err != nil {
-		log.Printf("Error decoding request body: %v", err)
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	// Log received profile
-	log.Printf("Received NF Profile: %+v\n", profile)
+	if profile.NFID != nfInstanceID {
+		http.Error(w, "Mismatch between URL and profile NFID", http.StatusBadRequest)
+		return
+	}
 
-	// Store NF profile in Redis
 	data, err := json.Marshal(profile)
 	if err != nil {
-		log.Printf("Error marshaling NF profile: %v", err)
-		http.Error(w, "Failed to process NF profile", http.StatusInternalServerError)
+		http.Error(w, "Failed to process profile", http.StatusInternalServerError)
 		return
 	}
 
-	if err := redisClient.Set(ctx, profile.NFID, data, 0).Err(); err != nil {
-		log.Printf("Error saving NF profile to Redis: %v", err)
-		http.Error(w, "Failed to save NF profile", http.StatusInternalServerError)
+	if err := redisClient.Set(ctx, nfInstanceID, data, 0).Err(); err != nil {
+		http.Error(w, "Failed to save profile", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("NF %s registered successfully.", profile.NFID)
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("NF registered successfully"))
 }
 
-// Discover NFs by type
+// DiscoverNFs retrieves NFs based on filters
 func DiscoverNFs(w http.ResponseWriter, r *http.Request) {
-	log.Println("Handling NF discovery request...")
 	nfType := r.URL.Query().Get("nf_type")
-	log.Printf("NF type filter: %s\n", nfType)
+	iter := redisClient.Scan(ctx, 0, "*", 0).Iterator()
 
 	var results []NFProfile
-	iter := redisClient.Scan(ctx, 0, "*", 0).Iterator()
 	for iter.Next(ctx) {
 		val, err := redisClient.Get(ctx, iter.Val()).Result()
 		if err != nil {
-			log.Printf("Error retrieving NF profile from Redis: %v", err)
 			continue
 		}
 
@@ -135,46 +91,139 @@ func DiscoverNFs(w http.ResponseWriter, r *http.Request) {
 			if nfType == "" || profile.NFType == nfType {
 				results = append(results, profile)
 			}
-		} else {
-			log.Printf("Error unmarshaling NF profile: %v", err)
 		}
 	}
 
-	if err := iter.Err(); err != nil {
-		log.Printf("Error scanning Redis: %v", err)
-		http.Error(w, "Failed to discover NFs", http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("Discovered %d NFs matching type '%s'.\n", len(results), nfType)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(results)
 }
 
-// Deregister an NF
+// DeregisterNF removes an NF profile
 func DeregisterNF(w http.ResponseWriter, r *http.Request) {
-	log.Println("Handling NF deregistration request...")
 	vars := mux.Vars(r)
 	nfID := vars["nf_id"]
-	log.Printf("Deregistering NF ID: %s\n", nfID)
 
 	if err := redisClient.Del(ctx, nfID).Err(); err != nil {
-		log.Printf("Error deleting NF profile from Redis: %v", err)
 		http.Error(w, "Failed to deregister NF", http.StatusInternalServerError)
 		return
 	}
 
-	log.Printf("NF %s deregistered successfully.", nfID)
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("NF deregistered successfully"))
+}
+
+// NFHeartBeat updates the heartbeat of an NF
+func NFHeartBeat(w http.ResponseWriter, r *http.Request) {
+    vars := mux.Vars(r)
+    nfInstanceID := vars["nfInstanceID"]
+
+    existingProfileJSON, err := redisClient.Get(ctx, nfInstanceID).Result()
+    if err != nil {
+        http.Error(w, "NF not found", http.StatusNotFound)
+        return
+    }
+
+    var profile NFProfile
+    if err := json.Unmarshal([]byte(existingProfileJSON), &profile); err != nil {
+        http.Error(w, "Failed to process profile", http.StatusInternalServerError)
+        return
+    }
+
+    // Initialize AdditionalInfo if it is nil
+    if profile.AdditionalInfo == nil {
+        profile.AdditionalInfo = make(map[string]string)
+    }
+
+    // Use server-side timestamp for the heartbeat
+    serverTime := time.Now().UTC().Format(time.RFC3339)
+    profile.AdditionalInfo["last_heartbeat"] = serverTime
+
+    data, err := json.Marshal(profile)
+    if err != nil {
+        http.Error(w, "Failed to update profile", http.StatusInternalServerError)
+        return
+    }
+
+    if err := redisClient.Set(ctx, nfInstanceID, data, 0).Err(); err != nil {
+        http.Error(w, "Failed to save profile", http.StatusInternalServerError)
+        return
+    }
+
+    w.WriteHeader(http.StatusNoContent)
+}
+
+
+// CreateSubscription adds a new subscription
+func CreateSubscription(w http.ResponseWriter, r *http.Request) {
+	var subscription map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&subscription); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	subscriptionID := subscription["subscriptionId"].(string)
+	data, err := json.Marshal(subscription)
+	if err != nil {
+		http.Error(w, "Failed to process subscription", http.StatusInternalServerError)
+		return
+	}
+
+	if err := redisClient.Set(ctx, subscriptionID, data, 0).Err(); err != nil {
+		http.Error(w, "Failed to save subscription", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte("Subscription created successfully"))
+}
+
+// NotifySubscribers sends notifications to subscribers
+func NotifySubscribers(w http.ResponseWriter, r *http.Request) {
+	var notification map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&notification); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	iter := redisClient.Scan(ctx, 0, "subscription:*", 0).Iterator()
+	for iter.Next(ctx) {
+		subscriptionJSON, err := redisClient.Get(ctx, iter.Val()).Result()
+		if err != nil {
+			continue
+		}
+
+		var subscription map[string]interface{}
+		if err := json.Unmarshal([]byte(subscriptionJSON), &subscription); err == nil {
+			notificationURL := subscription["notificationUri"].(string)
+			go sendNotification(notificationURL, notification)
+		}
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Notifications sent"))
+}
+
+func sendNotification(notificationURL string, notification map[string]interface{}) {
+	data, _ := json.Marshal(notification)
+	http.Post(notificationURL, "application/json", bytes.NewBuffer(data))
 }
 
 // SetupRouter initializes the router and routes
 func SetupRouter() *mux.Router {
 	router := mux.NewRouter()
-	router.HandleFunc("/nrf/register", RegisterNF).Methods("POST")
-	router.HandleFunc("/nrf/discover", DiscoverNFs).Methods("GET")
-	router.HandleFunc("/nrf/deregister/{nf_id}", DeregisterNF).Methods("DELETE")
+
+	// NF Management
+	router.HandleFunc("/nnrf-nfm/v1/nf-instances/{nfInstanceID}", RegisterNF).Methods("PUT")
+	router.HandleFunc("/nnrf-nfm/v1/nf-instances/{nfInstanceID}", NFHeartBeat).Methods("PATCH")
+	router.HandleFunc("/nnrf-nfm/v1/nf-instances/{nf_id}", DeregisterNF).Methods("DELETE")
+
+	// NF Discovery
+	router.HandleFunc("/nnrf-disc/v1/nfs", DiscoverNFs).Methods("GET")
+
+	// Subscription Management
+	router.HandleFunc("/nnrf-sub/v1/subscriptions", CreateSubscription).Methods("POST")
+	router.HandleFunc("/nnrf-notify/v1/notifications", NotifySubscribers).Methods("POST")
+
 	return router
 }
 
